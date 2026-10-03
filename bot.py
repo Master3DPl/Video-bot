@@ -1,7 +1,6 @@
 import os
 import random
 import asyncio
-import nest_asyncio
 import textwrap
 from PIL import Image, ImageDraw, ImageFont
 from aiogram import Bot, Dispatcher, F, types
@@ -10,9 +9,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 import moviepy.video.fx.all as vfx
-
-# Настройка для Google Colab
-nest_asyncio.apply()
 
 # Твой токен бота
 TOKEN = "8998435250:AAEZAPRC91vOlxccasCCIRC503bgV0e5HRA"
@@ -98,7 +94,7 @@ def generate_large_descriptions_base():
         "сохрани, чтобы не забыть эту мысль. 🧠 #трансформация #успех",
         "а ведь реально так и есть. 🖤 #душа #эстетика",
         "перешли тому, кому нужно это услышать. 📲 #совет #жизнь",
-        "один честный ответ самому себе меняет всё. 🌪️ #сила #путь",
+        "один честный ответ самому себе меняет всё. 🌪️️ #сила #путь",
         "сколько еще будешь терпеть? 🎯 #выбор #цель",
         "задумайся на секунду. 🥀 #момент #переосмысление"
     ]
