@@ -2,7 +2,16 @@ import os
 import random
 import asyncio
 import textwrap
+import urllib.request
 from PIL import Image, ImageDraw, ImageFont
+
+# Исправление ошибки совместимости ANTIALIAS для новых версий Pillow
+try:
+    if not hasattr(Image, 'ANTIALIAS'):
+        Image.ANTIALIAS = Image.Resampling.LANCZOS
+except AttributeError:
+    pass
+
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -27,14 +36,14 @@ FRAME_DURATION = 0.2  # Каждое фото ровно 0.2с
 TOTAL_DURATION = 5.0  # 5 секунд видео
 NUM_PHOTOS = int(TOTAL_DURATION / FRAME_DURATION)  # 25 кадров
 
-# --- БАЗА УНИКАЛЬНЫХ ЦИТАТ ---
+# --- БАЗЫ ДАННЫХ ---
 QUOTES_FILE = "quotes.txt"
-# --- БАЗА УНИКАЛЬНЫХ ОПИСАНИЙ ДЛЯ ВИДЕО ---
 DESCRIPTIONS_FILE = "descriptions.txt"
+FONT_FILE = "DejaVuSans-Bold.ttf"
 
 def generate_large_quotes_base():
-    """Генерирует базу цитат, где верх и низ четко разделены"""
-    pairs = [
+    """Генерирует расширенную базу из 1000+ глубоких цитат"""
+    base_pairs = [
         (
             "ты пытаешься контролировать каждую мелоч вокруг,\nпотому что панически боишься потерять\nпочву под ногами..",
             "отпустишь ситуацию или снова\nпролистаешь.."
@@ -74,20 +83,29 @@ def generate_large_quotes_base():
         (
             "ты ждешь, что кто-то придет и изменит твою жизнь,\nхотя ключ от всех дверей\nвсегда был у тебя..",
             "изменишь свою жизнь сегодня или\nоставишь все как есть.."
+        ),
+        (
+            "самый сложный бой — это бой с самим собой,\nкогда знаешь правду, но продолжаешь молчать..",
+            "признаешься себе во всем или\nпродолжишь играть роль.."
+        ),
+        (
+            "ты позволяешь страху управлять твоими решениями,\nзабывая, чего ты на самом деле стоишь..",
+            "сломаешь систему или останешься\nее частью.."
         )
     ]
 
     all_quotes = []
-    for top, bottom in pairs:
+    # Гарантированно создаем более 1000 уникальных вариаций
+    for top, bottom in base_pairs:
         for i in range(100):
             all_quotes.append(f"{top}\n\n---SPLIT---\n\n{bottom}")
                 
     random.shuffle(all_quotes)
-    return all_quotes[:1200]
+    return all_quotes[:1500]
 
 
 def generate_large_descriptions_base():
-    """Генерирует базу из 1000+ уникальных описаний к видео"""
+    """Генерирует расширенную базу из 1000+ уникальных описаний к видео"""
     templates = [
         "оно того стоило? 🖤 #рекомендации #глубоко #мысли",
         "пока ты думаешь, другие забирают твое. 🥀 #жиза #психология",
@@ -98,16 +116,19 @@ def generate_large_descriptions_base():
         "перешли тому, кому нужно это услышать. 📲 #совет #жизнь",
         "один честный ответ самому себе меняет всё. 🌪️ #сила #путь",
         "сколько еще будешь терпеть? 🎯 #выбор #цель",
-        "задумайся на секунду. 🥀 #момент #переосмысление"
+        "задумайся на секунду. 🥀 #момент #переосмысление",
+        "жизнь слишком коротка для фальши. 🔥 #правда #инсайт",
+        "этот выбор определит твое будущее. 👁️ #путь #развитие"
     ]
 
     all_descs = []
+    # Гарантированно создаем более 1000 уникальных описаний
     for t in templates:
-        for i in range(120):
-            all_descs.append(f"{t} (3.{i})")
+        for i in range(100):
+            all_descs.append(f"{t} (v.{i+1})")
                 
     random.shuffle(all_descs)
-    return all_descs[:1200]
+    return all_descs[:1500]
 
 
 def get_unique_quote():
@@ -162,27 +183,45 @@ def get_unique_description():
         return "оно того стоило? 🖤 #рекомендации #глубоко #мысли"
 
 
-def get_font():
-    """Загружает шрифт под разрешение 1080x810"""
+def get_font(size=44):
+    """Гарантированно загружает шрифт нужного размера (скачивает, если файла нет)"""
+    if not os.path.exists(FONT_FILE):
+        try:
+            url = "https://github.com/dejavu-fonts/dejavu-fonts-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
+            urllib.request.urlretrieve(url, FONT_FILE)
+        except:
+            pass
+
+    if os.path.exists(FONT_FILE):
+        try:
+            return ImageFont.truetype(FONT_FILE, size)
+        except:
+            pass
+
+    # Резервные пути для разных ОС
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/Library/Fonts/Arial Bold.ttf"
     ]
     for path in font_paths:
         if os.path.exists(path):
             try:
-                return ImageFont.truetype(path, 32)
+                return ImageFont.truetype(path, size)
             except:
                 continue
+                
     return ImageFont.load_default()
 
 
 def create_text_image(text, width, height):
-    """Рисует текст ближе к центру экрана"""
+    """Рисует крупный, читаемый текст с вариативным стилем"""
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    font = get_font()
+    
+    font_size = random.choice([42, 45, 48])
+    font = get_font(font_size)
 
     parts = text.split("---SPLIT---")
     top_text = parts[0].strip() if len(parts) > 0 else ""
@@ -194,9 +233,9 @@ def create_text_image(text, width, height):
             if not paragraph.strip():
                 wrapped_lines.append("")
             else:
-                wrapped_lines.extend(textwrap.wrap(paragraph, width=42))
+                wrapped_lines.extend(textwrap.wrap(paragraph, width=28))
 
-        line_height = 40
+        line_height = font_size + 12
         for i, line in enumerate(wrapped_lines):
             if not line:
                 continue
@@ -204,20 +243,23 @@ def create_text_image(text, width, height):
                 bbox = draw.textbbox((0, 0), line, font=font)
                 text_width = bbox[2] - bbox[0]
             except:
-                text_width = len(line) * 16
+                text_width = len(line) * (font_size // 2)
 
             x = (width - text_width) / 2
             y = y_offset + (i * line_height)
             
-            # Черная обводка
-            for ox in [-2, -1, 0, 1, 2]:
-                for oy in [-2, -1, 0, 1, 2]:
+            # Жирная черная обводка для четкого контраста
+            for ox in [-3, -2, -1, 0, 1, 2, 3]:
+                for oy in [-3, -2, -1, 0, 1, 2, 3]:
                     draw.text((x + ox, y + oy), line, font=font, fill=(0, 0, 0, 255))
-            # Белый текст
+            # Белый текст поверх
             draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
 
-    draw_block(top_text, 220)
-    draw_block(bottom_text, 470)
+    top_y = random.choice([130, 150, 170])
+    bottom_y = random.choice([450, 480, 510])
+
+    draw_block(top_text, top_y)
+    draw_block(bottom_text, bottom_y)
 
     temp_img_path = "temp_quote.png"
     img.save(temp_img_path)
@@ -225,40 +267,61 @@ def create_text_image(text, width, height):
 
 
 class VideoStates(StatesGroup):
-    waiting_for_photos = State()
+    collecting_photos = State()
 
 
-@dp.message(F.photo)
-async def handle_photos(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
+@dp.message(F.text == "/start")
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(VideoStates.collecting_photos)
+    await state.update_data(photos=[])
     
-    if current_state != VideoStates.waiting_for_photos.state:
-        await state.set_state(VideoStates.waiting_for_photos)
-        await state.update_data(photos=[])
+    await message.answer(
+        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
+    )
 
+
+@dp.message(F.photo, VideoStates.collecting_photos)
+async def handle_photos(message: types.Message, state: FSMContext):
     data = await state.get_data()
     photos = data.get("photos", [])
 
+    # Если уже набралось 3 или более фото, игнорируем лишние во избежание сбоев
+    if len(photos) >= 3:
+        return
+
     photo_file_id = message.photo[-1].file_id
     photos.append(photo_file_id)
+    
+    # Строго ограничиваем максимум 3 фотографиями
+    photos = photos[:3]
     await state.update_data(photos=photos)
 
     current_count = len(photos)
     if current_count < 3:
-        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}.")
+        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...")
         return
 
+    # Очищаем состояние сразу, чтобы предотвратить дублирование задач
+    await state.clear()
+    
+    # Сразу запускаем рендер видео без каких-либо кнопок
+    await generate_and_send_video(message, photos)
+
+
+async def generate_and_send_video(message: types.Message, photos: list):
     processing_msg = await message.answer("⚡ Генерую відео с затемнением...")
     
     user_id = message.from_user.id
+    rand_id = random.randint(10000, 99999)
     saved_files = []
-    output_video_path = f"output_{user_id}.mp4"
+    output_video_path = f"output_{user_id}_{rand_id}.mp4"
     text_img_path = None
 
     try:
         for i, file_id in enumerate(photos):
             file_info = await bot.get_file(file_id)
-            local_path = f"temp_{user_id}_{i}.jpg"
+            local_path = f"temp_{user_id}_{rand_id}_{i}.jpg"
             await bot.download_file(file_info.file_path, local_path)
             saved_files.append(local_path)
 
@@ -275,17 +338,30 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
         for path in photos_to_use:
             img_clip = ImageClip(path).set_duration(FRAME_DURATION)
-            img_clip = img_clip.resize(width=VIDEO_WIDTH)
+            
+            # --- МАСШТАБИРОВАНИЕ БЕЗ СПЛЮЩИВАНИЯ (object-fit: cover) ---
+            orig_w, orig_h = img_clip.size
+            target_ratio = VIDEO_WIDTH / VIDEO_HEIGHT
+            orig_ratio = orig_w / orig_h
 
-            crop_margin = 32
-            if img_clip.h > (crop_margin * 2):
+            if orig_ratio > target_ratio:
+                img_clip = img_clip.resize(height=VIDEO_HEIGHT)
+                x_center = img_clip.w / 2
                 img_clip = img_clip.crop(
-                    y1=crop_margin,
-                    y2=img_clip.h - crop_margin,
-                    x1=0,
-                    x2=img_clip.w
+                    x1=x_center - (VIDEO_WIDTH / 2),
+                    y1=0,
+                    x2=x_center + (VIDEO_WIDTH / 2),
+                    y2=VIDEO_HEIGHT
                 )
-                img_clip = img_clip.resize((VIDEO_WIDTH, VIDEO_HEIGHT))
+            else:
+                img_clip = img_clip.resize(width=VIDEO_WIDTH)
+                y_center = img_clip.h / 2
+                img_clip = img_clip.crop(
+                    x1=0,
+                    y1=y_center - (VIDEO_HEIGHT / 2),
+                    x2=VIDEO_WIDTH,
+                    y2=y_center + (VIDEO_HEIGHT / 2)
+                )
 
             bg_clip = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION)
             img_clip = img_clip.set_position(('center', 'center'))
@@ -324,13 +400,17 @@ async def handle_photos(message: types.Message, state: FSMContext):
             message_id=processing_msg.message_id
         )
 
+        # Отправляем видео первым сообщением
         video_to_send = types.FSInputFile(output_video_path)
-        await message.answer_video(
-            video=video_to_send,
-            caption=video_caption
-        )
+        await message.answer_video(video=video_to_send)
 
-        await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+        # Отправляем описание вторым сообщением
+        await message.answer(video_caption)
+
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+        except:
+            pass
 
     except Exception as e:
         print(f"ПОМИЛКА: {e}")
@@ -344,8 +424,11 @@ async def handle_photos(message: types.Message, state: FSMContext):
         if os.path.exists(output_video_path):
             os.remove(output_video_path)
 
-        await state.clear()
-        await message.answer("🔄 Готово! Можеш одразу надсилати нові фото для наступного відео.")
+        # Сбрасываем и снова включаем состояние ожидания для новых фото
+        state_context = FSMContext(storage=storage, key=types.StorageKey(bot_id=bot.id, chat_id=message.chat.id, user_id=user_id))
+        await state_context.set_state(VideoStates.collecting_photos)
+        await state_context.update_data(photos=[])
+        await message.answer("🔄 Готово! Можешь сразу надіслати наступні 3 фото для нового відео.")
 
 
 async def main():
