@@ -8,9 +8,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# Корректные импорты для современных версий moviepy
-from moviepy import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
-import moviepy.fx as vfx
+# Корректные импорты для версии moviepy==1.0.3
+from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+import moviepy.video.fx.all as vfx
 
 # Твой токен бота
 TOKEN = "8998435250:AAEZAPRC91vOlxccasCCIRC503bgV0e5HRA"
@@ -298,8 +298,8 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
         final_video = concatenate_videoclips(clips, method="compose")
         
-        # Применение эффекта черно-белого фильтра через новый синтаксис
-        final_video = final_video.fx(vfx.blackwhite.blackwhite)
+        # Черно-белый фильтр
+        final_video = final_video.fx(vfx.blackwhite)
 
         txt_clip = ImageClip(text_img_path).set_duration(TOTAL_DURATION).set_position(('center', 'center'))
         final_video = CompositeVideoClip([final_video, txt_clip], size=(VIDEO_WIDTH, VIDEO_HEIGHT))
@@ -325,7 +325,6 @@ async def handle_photos(message: types.Message, state: FSMContext):
         )
 
         video_to_send = types.FSInputFile(output_video_path)
-        # Отправляем видео вместе с уникальным описанием в качестве подписи
         await message.answer_video(
             video=video_to_send,
             caption=video_caption
