@@ -7,7 +7,9 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+
+# Исправленный импорт для moviepy под Render (без .editor)
+from moviepy import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 import moviepy.video.fx.all as vfx
 
 # Твой токен бота
@@ -94,7 +96,7 @@ def generate_large_descriptions_base():
         "сохрани, чтобы не забыть эту мысль. 🧠 #трансформация #успех",
         "а ведь реально так и есть. 🖤 #душа #эстетика",
         "перешли тому, кому нужно это услышать. 📲 #совет #жизнь",
-        "один честный ответ самому себе меняет всё. 🌪️️ #сила #путь",
+        "один честный ответ самому себе меняет всё. 🌪️ #сила #путь",
         "сколько еще будешь терпеть? 🎯 #выбор #цель",
         "задумайся на секунду. 🥀 #момент #переосмысление"
     ]
@@ -345,7 +347,7 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
 
 async def main():
-    print("Бот запущено!")
+    print("Бот успішно запущено!")
     await dp.start_polling(bot)
 
 
