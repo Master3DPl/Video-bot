@@ -5,3 +5,4 @@ yt-dlp
 flask
 rapidfuzz
 aiogram
+moviepy.fx
