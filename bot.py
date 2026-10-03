@@ -106,7 +106,6 @@ def generate_large_descriptions_base():
     all_descs = []
     for t in templates:
         for i in range(120):
-            # Добавляем небольшую вариативность, чтобы каждая строка была уникальной
             all_descs.append(f"{t} (3.{i})")
                 
     random.shuffle(all_descs)
@@ -266,7 +265,7 @@ async def handle_photos(message: types.Message, state: FSMContext):
             saved_files.append(local_path)
 
         quote_text = get_unique_quote()
-        video_caption = get_unique_description()  # Получаем уникальное описание для видео
+        video_caption = get_unique_description()
         text_img_path = create_text_image(quote_text, VIDEO_WIDTH, VIDEO_HEIGHT)
 
         clips = []
@@ -280,7 +279,6 @@ async def handle_photos(message: types.Message, state: FSMContext):
             img_clip = ImageClip(path).set_duration(FRAME_DURATION)
             img_clip = img_clip.resize(width=VIDEO_WIDTH)
 
-            # Обрезка сверху и снизу на ~1 см (~32 пикселя)
             crop_margin = 32
             if img_clip.h > (crop_margin * 2):
                 img_clip = img_clip.crop(
@@ -303,11 +301,9 @@ async def handle_photos(message: types.Message, state: FSMContext):
         final_video = concatenate_videoclips(clips, method="compose")
         final_video = final_video.fx(vfx.blackwhite)
 
-        # Накладываем текст
         txt_clip = ImageClip(text_img_path).set_duration(TOTAL_DURATION).set_position(('center', 'center'))
         final_video = CompositeVideoClip([final_video, txt_clip], size=(VIDEO_WIDTH, VIDEO_HEIGHT))
 
-        # Жёсткий фильтр FFmpeg для точного разрешения 1080x810
         filter_complex = f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}"
 
         final_video.write_videofile(
@@ -329,7 +325,6 @@ async def handle_photos(message: types.Message, state: FSMContext):
         )
 
         video_to_send = types.FSInputFile(output_video_path)
-        # Отправляем видео вместе с уникальным сгенерированным описанием
         await message.answer_video(
             video=video_to_send,
             caption=video_caption
@@ -349,15 +344,14 @@ async def handle_photos(message: types.Message, state: FSMContext):
         if os.path.exists(output_video_path):
             os.remove(output_video_path)
 
-        # Сброс состояния для бесконечной отправки фото пачками по 3
         await state.clear()
         await message.answer("🔄 Готово! Можеш одразу надсилати нові фото для наступного відео.")
 
 
 async def main():
-    print("Бот запущено! База описаний подключена.")
+    print("Бот запущено!")
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    await main()
+    asyncio.run(main())
