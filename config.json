@@ -1,0 +1,19 @@
+{
+    "admin_chat_id": 1049082814,
+    "users_lang": {
+        "8432375097": "ru"
+    },
+    "bot_enabled": true,
+    "video_creation_enabled": true,
+    "user_approval_required": true,
+    "admin_chat_ids": [
+        123456789,
+        1049082814
+    ],
+    "extra_admins": [],
+    "user_approval_requirement": true,
+    "btn_music_enabled": true,
+    "btn_lang_enabled": true,
+    "btn_instruction_enabled": true,
+    "btn_support_enabled": true
+}
