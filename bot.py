@@ -247,69 +247,18 @@ async def handle_photos(message: types.Message, state: FSMContext):
     photos.append(photo_file_id)
     await state.update_data(photos=photos)
 
-    current_count = len(photos)
-    if current_count < 3:
-        await message.answer(f"📸 Отримано фото {current_count}/3. Чекаю ще...", reply_markup=get_main_keyboard())
-        return
+    # Чекаємо трохи, щоб з'явилися інші фото з альбому, якщо вони надіслані пачкою
+    if len(photos) < 3:
+        await asyncio.sleep(0.8)
+        data = await state.get_data()
+        photos = data.get("photos", [])
+        if len(photos) < 3:
+            return
 
     photos_to_process = list(photos[:3])
     await state.update_data(photos=[])
 
     await generate_and_send_video(message, photos_to_process)
-
-
-def render_video_sync(user_id, rand_id, saved_files):
-    """Синхронна функція рендерингу відео у фоновому потоці"""
-    output_video_path = f"output_{user_id}_{rand_id}.mp4"
-
-    try:
-        clips = []
-        photos_to_use = []
-        while len(photos_to_use) < NUM_PHOTOS:
-            for path in saved_files:
-                if len(photos_to_use) < NUM_PHOTOS:
-                    photos_to_use.append(path)
-
-        for path in photos_to_use:
-            img_clip = ImageClip(path).set_duration(FRAME_DURATION)
-
-            orig_w, orig_h = img_clip.size
-            target_ratio = VIDEO_WIDTH / VIDEO_HEIGHT
-            orig_ratio = orig_w / orig_h
-
-            if orig_ratio > target_ratio:
-                img_clip = img_clip.resize(height=VIDEO_HEIGHT)
-                x_center = img_clip.w / 2
-                img_clip = img_clip.crop(
-                    x1=x_center - (VIDEO_WIDTH / 2), y1=0,
-                    x2=x_center + (VIDEO_WIDTH / 2), y2=VIDEO_HEIGHT
-                )
-            else:
-                img_clip = img_clip.resize(width=VIDEO_WIDTH)
-                y_center = img_clip.h / 2
-                img_clip = img_clip.crop(
-                    x1=0, y1=y_center - (VIDEO_HEIGHT / 2),
-                    x2=VIDEO_WIDTH, y2=y_center + (VIDEO_HEIGHT / 2)
-                )
-
-            bg_clip = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION)
-            img_clip = img_clip.set_position(('center', 'center'))
-            dark_overlay = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION).set_opacity(0.45)
-
-            composed_clip = CompositeVideoClip([bg_clip, img_clip, dark_overlay], size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(FRAME_DURATION)
-            clips.append(composed_clip)
-
-        final_video = concatenate_videoclips(clips, method="compose")
-        final_video = final_video.fx(vfx.blackwhite)
-
-        text_img_path = f"temp_quote_{user_id}_{rand_id}.png"
-        # Текст заздалегідь згенеровано зовні
-        # (передаємо шлях далі)
-
-        return output_video_path
-    except Exception as e:
-        print(f"Помилка в render_video_sync: {e}")
-        raise e
 
 
 async def generate_and_send_video(message: types.Message, photo_file_ids: list):
@@ -325,14 +274,13 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
     output_video_path = f"output_{user_id}_{rand_id}.mp4"
 
     try:
-        # Скачуємо фото асинхронно через правильний метод aiogram
+        # Надійне скачування через file_path
         for i, file_id in enumerate(photo_file_ids):
             file_info = await bot.get_file(file_id)
             local_path = f"temp_{user_id}_{rand_id}_{i}.jpg"
-            await bot.download(file_info, destination=local_path)
+            await bot.download(file_info.file_path, destination=local_path)
             saved_files.append(local_path)
 
-        # Функція рендерингу для запуску в потоці
         def blocking_render():
             clips = []
             photos_to_use = []
@@ -387,8 +335,11 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
             )
             final_video.close()
 
-        # Запускаємо важкий MoviePy в окремому потоці
+        # Запускаємо важкий рендеринг у фоновому потоці
         await asyncio.to_thread(blocking_render)
+
+        if not os.path.exists(output_video_path) or os.path.getsize(output_video_path) == 0:
+            raise Exception("Файл відео не був створений або пустий.")
 
         await bot.edit_message_text(
             "📤 Відео готово! Надсилаю...",
@@ -405,18 +356,20 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
         except:
             pass
 
-        if os.path.exists(output_video_path):
-            os.remove(output_video_path)
-
     except Exception as e:
-        print(f"ПОМИЛКА: {e}")
-        await message.answer(f"❌ Сталася помилка при генерації: {e}", reply_markup=get_main_keyboard())
+        print(f"ПОМИЛКА ПРИ ГЕНЕРАЦІЇ ВІДЕО: {e}")
+        await message.answer(f"❌ Сталася помилка при генерації відео: {e}", reply_markup=get_main_keyboard())
     finally:
         for path in saved_files:
             if os.path.exists(path):
                 os.remove(path)
         if text_img_path and os.path.exists(text_img_path):
             os.remove(text_img_path)
+        if os.path.exists(output_video_path):
+            try:
+                os.remove(output_video_path)
+            except:
+                pass
 
         await message.answer("🔄 Готово! Можеш одразу надіслати наступні 3 фото.", reply_markup=get_main_keyboard())
 
