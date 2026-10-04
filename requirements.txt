@@ -1,5 +1,3 @@
-aiogram
-Pillow
-moviepy
-nest-asyncio
-pydantic
+aiogram==3.3.0
+moviepy==1.0.3
+Pillow==10.2.0
