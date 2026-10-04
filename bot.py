@@ -81,7 +81,7 @@ def generate_large_descriptions_base():
     templates = [
         "воно того варте? 🖤 #рекомендації #глибоко #думки",
         "поки ти думаєш, інші забирають твоє. 🥀 #жиза #психологія",
-        "відчув це? ⚡️ #правдажиття #мотивація",
+        "відчув це? ⚡️️ #правдажиття #мотивація",
         "час іде, а ти все чекаєш... ⌛️ #реальність #думкивголос",
         "збережи, щоб не забути цю думку. 🧠 #трансформація #успіх",
         "а адже реально так і є. 🖤 #душа #естетика"
@@ -240,16 +240,26 @@ async def handle_photos(message: types.Message, state: FSMContext):
     data = await state.get_data()
     photos = data.get("photos", [])
 
+    if len(photos) >= 3:
+        return
+
     photo_file_id = message.photo[-1].file_id
     if photo_file_id not in photos:
         photos.append(photo_file_id)
         await state.update_data(photos=photos)
 
-    # Як тільки набралося рівно 3 фото — відразу запускаємо генерацію без зайвих очікувань
-    if len(photos) >= 3:
-        photos_to_process = list(photos[:3])
-        await state.update_data(photos=[])
-        await generate_and_send_video(message, photos_to_process)
+    # Даємо невеличку паузу, щоб бот встиг прийняти всі 3 фото з альбому
+    if len(photos) < 3:
+        await asyncio.sleep(1.0)
+        data = await state.get_data()
+        photos = data.get("photos", [])
+        if len(photos) < 3:
+            return
+
+    photos_to_process = list(photos[:3])
+    await state.update_data(photos=[])
+
+    await generate_and_send_video(message, photos_to_process)
 
 
 async def generate_and_send_video(message: types.Message, photo_file_ids: list):
