@@ -160,7 +160,7 @@ def get_font(size=54):
 def create_text_image(text, width, height):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    font_size = 54  # Пропорційно збільшено під 1080x810
+    font_size = 54
     font = get_font(font_size)
 
     parts = text.split("---SPLIT---")
@@ -258,16 +258,11 @@ async def handle_photos(message: types.Message, state: FSMContext):
     await generate_and_send_video(message, photos_to_process)
 
 
-def render_video_sync(user_id, rand_id, photos, quote_text, text_img_path):
-    saved_files = []
+def render_video_sync(user_id, rand_id, saved_files):
+    """Синхронна функція рендерингу відео у фоновому потоці"""
     output_video_path = f"output_{user_id}_{rand_id}.mp4"
 
     try:
-        for i, file_obj in enumerate(photos):
-            local_path = f"temp_{user_id}_{rand_id}_{i}.jpg"
-            file_obj.download(destination_path=local_path)
-            saved_files.append(local_path)
-
         clips = []
         photos_to_use = []
         while len(photos_to_use) < NUM_PHOTOS:
@@ -307,24 +302,14 @@ def render_video_sync(user_id, rand_id, photos, quote_text, text_img_path):
         final_video = concatenate_videoclips(clips, method="compose")
         final_video = final_video.fx(vfx.blackwhite)
 
-        txt_clip = ImageClip(text_img_path).set_duration(TOTAL_DURATION).set_position(('center', 'center'))
-        final_video = CompositeVideoClip([final_video, txt_clip], size=(VIDEO_WIDTH, VIDEO_HEIGHT))
+        text_img_path = f"temp_quote_{user_id}_{rand_id}.png"
+        # Текст заздалегідь згенеровано зовні
+        # (передаємо шлях далі)
 
-        final_video.write_videofile(
-            output_video_path,
-            fps=FPS,
-            codec="libx264",
-            audio=False,
-            preset="ultrafast",
-            threads=4,
-            logger=None
-        )
-        final_video.close()
         return output_video_path
-    finally:
-        for path in saved_files:
-            if os.path.exists(path):
-                os.remove(path)
+    except Exception as e:
+        print(f"Помилка в render_video_sync: {e}")
+        raise e
 
 
 async def generate_and_send_video(message: types.Message, photo_file_ids: list):
@@ -336,15 +321,74 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
     video_caption = get_unique_description()
     text_img_path = create_text_image(quote_text, VIDEO_WIDTH, VIDEO_HEIGHT)
 
-    try:
-        file_objs = []
-        for file_id in photo_file_ids:
-            file_info = await bot.get_file(file_id)
-            file_objs.append(file_info)
+    saved_files = []
+    output_video_path = f"output_{user_id}_{rand_id}.mp4"
 
-        output_video_path = await asyncio.to_thread(
-            render_video_sync, user_id, rand_id, file_objs, quote_text, text_img_path
-        )
+    try:
+        # Скачуємо фото асинхронно через правильний метод aiogram
+        for i, file_id in enumerate(photo_file_ids):
+            file_info = await bot.get_file(file_id)
+            local_path = f"temp_{user_id}_{rand_id}_{i}.jpg"
+            await bot.download(file_info, destination=local_path)
+            saved_files.append(local_path)
+
+        # Функція рендерингу для запуску в потоці
+        def blocking_render():
+            clips = []
+            photos_to_use = []
+            while len(photos_to_use) < NUM_PHOTOS:
+                for path in saved_files:
+                    if len(photos_to_use) < NUM_PHOTOS:
+                        photos_to_use.append(path)
+
+            for path in photos_to_use:
+                img_clip = ImageClip(path).set_duration(FRAME_DURATION)
+
+                orig_w, orig_h = img_clip.size
+                target_ratio = VIDEO_WIDTH / VIDEO_HEIGHT
+                orig_ratio = orig_w / orig_h
+
+                if orig_ratio > target_ratio:
+                    img_clip = img_clip.resize(height=VIDEO_HEIGHT)
+                    x_center = img_clip.w / 2
+                    img_clip = img_clip.crop(
+                        x1=x_center - (VIDEO_WIDTH / 2), y1=0,
+                        x2=x_center + (VIDEO_WIDTH / 2), y2=VIDEO_HEIGHT
+                    )
+                else:
+                    img_clip = img_clip.resize(width=VIDEO_WIDTH)
+                    y_center = img_clip.h / 2
+                    img_clip = img_clip.crop(
+                        x1=0, y1=y_center - (VIDEO_HEIGHT / 2),
+                        x2=VIDEO_WIDTH, y2=y_center + (VIDEO_HEIGHT / 2)
+                    )
+
+                bg_clip = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION)
+                img_clip = img_clip.set_position(('center', 'center'))
+                dark_overlay = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION).set_opacity(0.45)
+
+                composed_clip = CompositeVideoClip([bg_clip, img_clip, dark_overlay], size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(FRAME_DURATION)
+                clips.append(composed_clip)
+
+            final_video = concatenate_videoclips(clips, method="compose")
+            final_video = final_video.fx(vfx.blackwhite)
+
+            txt_clip = ImageClip(text_img_path).set_duration(TOTAL_DURATION).set_position(('center', 'center'))
+            final_video = CompositeVideoClip([final_video, txt_clip], size=(VIDEO_WIDTH, VIDEO_HEIGHT))
+
+            final_video.write_videofile(
+                output_video_path,
+                fps=FPS,
+                codec="libx264",
+                audio=False,
+                preset="ultrafast",
+                threads=4,
+                logger=None
+            )
+            final_video.close()
+
+        # Запускаємо важкий MoviePy в окремому потоці
+        await asyncio.to_thread(blocking_render)
 
         await bot.edit_message_text(
             "📤 Відео готово! Надсилаю...",
@@ -368,6 +412,9 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
         print(f"ПОМИЛКА: {e}")
         await message.answer(f"❌ Сталася помилка при генерації: {e}", reply_markup=get_main_keyboard())
     finally:
+        for path in saved_files:
+            if os.path.exists(path):
+                os.remove(path)
         if text_img_path and os.path.exists(text_img_path):
             os.remove(text_img_path)
 
