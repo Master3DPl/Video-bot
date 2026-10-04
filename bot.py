@@ -30,7 +30,7 @@ dp = Dispatcher(storage=storage)
 
 # --- НАСТРОЙКИ ВИДЕО (1080x810) ---
 VIDEO_WIDTH = 1080
-VIDEO_HEIGHT = 810  
+VIDEO_HEIGHT = 810
 FPS = 24
 FRAME_DURATION = 0.2  # Каждое фото ровно 0.2с
 TOTAL_DURATION = 5.0  # 5 секунд видео
@@ -78,7 +78,7 @@ def generate_large_quotes_base():
         ),
         (
             "ты окружаешь себя иллюзиями безопасности,\nпотому что боишься столкнуться\nс суровой реальностью..",
-            "сделаешь шаг вперед или сдашься\nпри первой же трудности.."
+            "сделаешь шаг вперед или сдаешься\nпри первой же трудности.."
         ),
         (
             "ты ждешь, что кто-то придет и изменит твою жизнь,\nхотя ключ от всех дверей\nвсегда был у тебя..",
@@ -98,7 +98,7 @@ def generate_large_quotes_base():
     for top, bottom in base_pairs:
         for i in range(100):
             all_quotes.append(f"{top}\n\n---SPLIT---\n\n{bottom}")
-                
+
     random.shuffle(all_quotes)
     return all_quotes[:1500]
 
@@ -124,12 +124,13 @@ def generate_large_descriptions_base():
     for t in templates:
         for i in range(100):
             all_descs.append(f"{t} (v.{i+1})")
-                
+
     random.shuffle(all_descs)
     return all_descs[:1500]
 
 
 def get_unique_quote():
+    """Берёт цитату из файла и удаляет её, чтобы она не повторялась"""
     if not os.path.exists(QUOTES_FILE):
         quotes = generate_large_quotes_base()
         with open(QUOTES_FILE, "w", encoding="utf-8") as f:
@@ -145,16 +146,17 @@ def get_unique_quote():
 
         selected = random.choice(quotes)
         quotes.remove(selected)
-        
+
         with open(QUOTES_FILE, "w", encoding="utf-8") as f:
             f.write("\n===NEXT===\n".join(quotes))
-            
+
         return selected
     except:
         return "ты пытаешься контролировать каждую мелоч вокруг..\n\n---SPLIT---\n\nотпустишь ситуацию или снова пролистаешь.."
 
 
 def get_unique_description():
+    """Берёт уникальное описание из файла и удаляет его"""
     if not os.path.exists(DESCRIPTIONS_FILE):
         descs = generate_large_descriptions_base()
         with open(DESCRIPTIONS_FILE, "w", encoding="utf-8") as f:
@@ -170,16 +172,17 @@ def get_unique_description():
 
         selected = random.choice(descs)
         descs.remove(selected)
-        
+
         with open(DESCRIPTIONS_FILE, "w", encoding="utf-8") as f:
             f.write("\n===NEXT===\n".join(descs))
-            
+
         return selected
     except:
         return "оно того стоило? 🖤 #рекомендации #глубоко #мысли"
 
 
 def get_font(size=44):
+    """Гарантированно загружает шрифт нужного размера (скачивает, если файла нет)"""
     if not os.path.exists(FONT_FILE):
         try:
             url = "https://github.com/dejavu-fonts/dejavu-fonts-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
@@ -205,14 +208,15 @@ def get_font(size=44):
                 return ImageFont.truetype(path, size)
             except:
                 continue
-                
+
     return ImageFont.load_default()
 
 
 def create_text_image(text, width, height):
+    """Рисует крупный, читаемый текст с вариативным стилем"""
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
+
     font_size = random.choice([42, 45, 48])
     font = get_font(font_size)
 
@@ -240,7 +244,7 @@ def create_text_image(text, width, height):
 
             x = (width - text_width) / 2
             y = y_offset + (i * line_height)
-            
+
             for ox in [-3, -2, -1, 0, 1, 2, 3]:
                 for oy in [-3, -2, -1, 0, 1, 2, 3]:
                     draw.text((x + ox, y + oy), line, font=font, fill=(0, 0, 0, 255))
@@ -266,7 +270,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_state(VideoStates.collecting_photos)
     await state.update_data(photos=[])
-    
+
     await message.answer(
         "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
     )
@@ -282,7 +286,7 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
     photo_file_id = message.photo[-1].file_id
     photos.append(photo_file_id)
-    
+
     photos = photos[:3]
     await state.update_data(photos=photos)
 
@@ -297,7 +301,7 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
 async def generate_and_send_video(message: types.Message, photos: list):
     processing_msg = await message.answer("⚡ Генерую відео с затемнением...")
-    
+
     user_id = message.from_user.id
     rand_id = random.randint(10000, 99999)
     saved_files = []
@@ -324,7 +328,7 @@ async def generate_and_send_video(message: types.Message, photos: list):
 
         for path in photos_to_use:
             img_clip = ImageClip(path).set_duration(FRAME_DURATION)
-            
+
             orig_w, orig_h = img_clip.size
             target_ratio = VIDEO_WIDTH / VIDEO_HEIGHT
             orig_ratio = orig_w / orig_h
@@ -414,5 +418,6 @@ async def main():
     await dp.start_polling(bot)
 
 
+# Безопасный запуск для Render и серверов
 if __name__ == "__main__":
     asyncio.run(main())
