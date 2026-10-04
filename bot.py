@@ -3,10 +3,12 @@ import random
 import asyncio
 import textwrap
 import urllib.request
+import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime, timedelta
 
-# Исправление ошибки совместимости ANTIALIAS для новых версий Pillow
+# Виправлення помилки сумісності ANTIALIAS для нових версій Pillow
 try:
     if not hasattr(Image, 'ANTIALIAS'):
         Image.ANTIALIAS = Image.Resampling.LANCZOS
@@ -17,84 +19,83 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramConflictError
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-# Корректные импорты для версии moviepy==1.0.3
+# Коректні імпорти для версії moviepy==1.0.3
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 import moviepy.video.fx.all as vfx
 
-# Твой токен бота
+# Твій токен бота
 TOKEN = "8998435250:AAEZAPRC91vOlxccasCCIRC503bgV0e5HRA"
 
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# --- НАСТРОЙКИ ВИДЕО (1080x810) ---
+# --- НАЛАШТУВАННЯ ВІДЕО (1080x810) ---
 VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 810
 FPS = 24
-FRAME_DURATION = 0.2  # Каждое фото ровно 0.2с
-TOTAL_DURATION = 5.0  # 5 секунд видео
-NUM_PHOTOS = int(TOTAL_DURATION / FRAME_DURATION)  # 25 кадров
+FRAME_DURATION = 0.2  # Кожне фото рівно 0.2с
+TOTAL_DURATION = 5.0  # 5 секунд відео
+NUM_PHOTOS = int(TOTAL_DURATION / FRAME_DURATION)  # 25 кадрів
 
-# --- БАЗЫ ДАННЫХ ---
+# --- БАЗИ ДАНИХ ---
 QUOTES_FILE = "quotes.txt"
 DESCRIPTIONS_FILE = "descriptions.txt"
 FONT_FILE = "DejaVuSans-Bold.ttf"
 
-# Словарь для отслеживания времени активности сессий пользователей
-user_sessions = {}
-
 def generate_large_quotes_base():
-    """Генерирует расширенную базу из 1000+ глубоких цитат"""
+    """Генерує розширену базу з 1000+ глибоких цитат"""
     base_pairs = [
         (
-            "ты пытаешься контролировать каждую мелоч вокруг,\nпотому что панически боишься потерять\nпочву под ногами..",
-            "отпустишь ситуацию или снова\nпролистаешь.."
+            "ти намагаєшся контролювати кожну дрібницю навколо,\nтому що панічно боїшся втратити\nґрунт під ногами..",
+            "відпустиш ситуацію чи знову\nпрогорнеш.."
         ),
         (
-            "ты годами откладываешь свою жизнь на потом,\nпотому что боишься сделать\nнеправильный выбор..",
-            "изменишь подход или дальше\nбудешь терпеть.."
+            "ти роками відкладаєш своє життя на потім,\nтому що боїшся зробити\nнеправильний вибір..",
+            "зміниш підхід чи далі\nбудеш терпіти.."
         ),
         (
-            "ты постоянно ждешь идеального момента для старта,\nзабывая о том, что время\nнеумолимо идет вперед..",
-            "рискнешь всем или останешься\nв зоне комфорта.."
+            "ти постійно чекаєш ідеального моменту для старту,\nзабуваючи про те, що час\nневмолимо йде вперед..",
+            "ризикнеш всім чи залишишся\nв зоні комфорту.."
         ),
         (
-            "ты привык терпеть дискомфорт и молчать,\nпотому что боишься показаться\nслабым перед другими..",
-            "начнешь действовать или так\nи останешься зрителем.."
+            "ти звик терпіти дискомфорт і мовчати,\nтому що боїшся здатися\nслабким перед іншими..",
+            "почнеш діяти чи так\nі залишишся глядачем.."
         ),
         (
-            "ты тратишь всю свою энергию на чужие ожидания,\nсовершенно забывая о том,\nчего хочешь ты сам..",
-            "возьмешь ответственность или продолжишь\nискать виноватых.."
+            "ти витрачаєш всю свою енергію на чужі очікування,\nзовсім забуваючи про те,\nчого хочеш ти сам..",
+            "візьмеш відповідальність чи продовжиш\nшукати винних.."
         ),
         (
-            "ты держишься за прошлое, которое уже давно прошло,\nпотому что боишься шагнуть\nв неизвестность..",
-            "выйдешь из тени или навсегда\nпотеряешь свой шанс.."
+            "ти тримаєшся за минуле, яке вже давно минуло,\nтому що боїшся зробити крок\nв невідомість..",
+            "вийдеш з тіні чи назавжди\nвтратиш свій шанс.."
         ),
         (
-            "ты ищешь одобрения у тех, кто сам заблудился,\nи удивляешься, почему стоишь на месте..",
-            "поверь в себя или продолжишь\nсомневаться в каждом шаге.."
+            "ти шукаєш схвалення у тих, хто сам заблукав,\nі дивуєшся, чому стоїш на місці..",
+            "повір в себе чи продовжиш\nсумніватися в кожному кроці.."
         ),
         (
-            "ты постоянно сомневаешься в своих силах,\nдаже не попробовав сделать\nпервый шаг к цели..",
-            "скажешь правду себе или снова\nобманешь свои мечты.."
+            "ти постійно сумніваєшся у своїх силах,\nнавіть не спробувавши зробити\nперший крок до мети..",
+            "скажеш правду собі чи знову\nобманеш свої мрії.."
         ),
         (
-            "ты окружаешь себя иллюзиями безопасности,\nпотому что боишься столкнуться\nс суровой реальностью..",
-            "сделаешь шаг вперед или сдашься\nпри первой же трудности.."
+            "ти оточуєш себе ілюзіями безпеки,\nтому що боїшся зіткнутися\nз суворою реальністю..",
+            "зробиш крок вперед чи здасися\nпри першій же труднощі.."
         ),
         (
-            "ты ждешь, что кто-то придет и изменит твою жизнь,\nхотя ключ от всех дверей\nвсегда был у тебя..",
-            "изменишь свою жизнь сегодня или\nоставишь все как есть.."
+            "ти чекаєш, що хтось прийде і змінить твоє життя,\nхоча ключ від усіх дверей\nзавжди був у тебе..",
+            "зміниш своє життя сьогодні чи\nзалишиш все як є.."
         ),
         (
-            "самый сложный бой — это бой с самим собой,\nкогда знаешь правду, но продолжаешь молчать..",
-            "признаешься себе во всем или\nпродолжишь играть роль.."
+            "найскладніший бій — це бій із самим собою,\nколи знаєш правду, але продовжуєш мовчати..",
+            "зізнаєшся собі у всьому чи\nпродовжиш грати роль.."
         ),
         (
-            "ты позволяешь страху управлять твоими решениями,\nзабывая, чего ты на самом деле стоишь..",
-            "сломаешь систему или останешься\nее частью.."
+            "ти дозволяєш страху керувати твоїми рішеннями,\nзабуваючи, чого ти насправді вартісний..",
+            "зламаєш систему чи залишишся\nїї частиною.."
         )
     ]
 
@@ -108,20 +109,20 @@ def generate_large_quotes_base():
 
 
 def generate_large_descriptions_base():
-    """Генерирует расширенную базу из 1000+ уникальных описаний к видео"""
+    """Генерує розширену базу з 1000+ унікальних описів до відео"""
     templates = [
-        "оно того стоило? 🖤 #рекомендации #глубоко #мысли",
-        "пока ты думаешь, другие забирают твое. 🥀 #жиза #психология",
-        "чувствовал это? ⚡️ #правдажизни #мотивация",
-        "время идет, а ты всё ждёшь... ⌛️ #реальность #мысливслух",
-        "сохрани, чтобы не забыть эту мысль. 🧠 #трансформация #успех",
-        "а ведь реально так и есть. 🖤 #душа #эстетика",
-        "перешли тому, кому нужно это услышать. 📲 #совет #жизнь",
-        "один честный ответ самому себе меняет всё. 🌪️ #сила #путь",
-        "сколько ещe будешь терпеть? 🎯 #выбор #цель",
-        "задумайся на секунду. 🥀 #момент #переосмысление",
-        "жизнь слишком коротка для фальши. 🔥 #правда #инсайт",
-        "этой выбор определит твое будущее. 👁️ #путь #развитие"
+        "воно того варте? 🖤 #рекомендації #глибоко #думки",
+        "поки ти думаєш, інші забирають твоє. 🥀 #жиза #психологія",
+        "відчув це? ⚡️ #правдажиття #мотивація",
+        "час іде, а ти все чекаєш... ⌛️ #реальність #думкивголос",
+        "збережи, щоб не забути цю думку. 🧠 #трансформація #успіх",
+        "а адже реально так і є. 🖤 #душа #естетика",
+        "перешли тому, кому потрібно це почути. 📲 #порада #життя",
+        "одна чесна відповідь самому собі змінює все. 🌪️ #сила #шлях",
+        "скільки ще будеш терпіти? 🎯 #вибір #мета",
+        "задумайся на секунду. 🥀 #момент #переосмислення",
+        "життя занадто коротке для фальші. 🔥 #правда #інсайт",
+        "цей вибір визначить твоє майбутнє. 👁️ #шлях #розвиток"
     ]
 
     all_descs = []
@@ -134,7 +135,6 @@ def generate_large_descriptions_base():
 
 
 def get_unique_quote():
-    """Берёт цитату из файла и удаляет её, чтобы она не повторялась"""
     if not os.path.exists(QUOTES_FILE):
         quotes = generate_large_quotes_base()
         with open(QUOTES_FILE, "w", encoding="utf-8") as f:
@@ -156,11 +156,10 @@ def get_unique_quote():
 
         return selected
     except:
-        return "ты пытаешься контролировать каждую мелоч вокруг..\n\n---SPLIT---\n\nотпустишь ситуацию или снова пролистаешь.."
+        return "ти намагаєшся контролювати кожну дрібницю навколо..\n\n---SPLIT---\n\nвідпустиш ситуацію чи знову прогорнеш.."
 
 
 def get_unique_description():
-    """Берёт уникальное описание из файла и удаляет его"""
     if not os.path.exists(DESCRIPTIONS_FILE):
         descs = generate_large_descriptions_base()
         with open(DESCRIPTIONS_FILE, "w", encoding="utf-8") as f:
@@ -182,11 +181,10 @@ def get_unique_description():
 
         return selected
     except:
-        return "оно того стоило? 🖤 #рекомендации #глубоко #мысли"
+        return "воно того варте? 🖤 #рекомендації #глибоко #думки"
 
 
 def get_font(size=44):
-    """Гарантированно загружает шрифт нужного размера (скачивает, если файла нет)"""
     if not os.path.exists(FONT_FILE):
         try:
             url = "https://github.com/dejavu-fonts/dejavu-fonts-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
@@ -217,7 +215,6 @@ def get_font(size=44):
 
 
 def create_text_image(text, width, height):
-    """Рисует крупный, читаемый текст с вариативным стилем"""
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -249,11 +246,9 @@ def create_text_image(text, width, height):
             x = (width - text_width) / 2
             y = y_offset + (i * line_height)
 
-            # Жирная черная обводка для четкого контраста
             for ox in [-3, -2, -1, 0, 1, 2, 3]:
                 for oy in [-3, -2, -1, 0, 1, 2, 3]:
                     draw.text((x + ox, y + oy), line, font=font, fill=(0, 0, 0, 255))
-            # Белый текст поверх
             draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
 
     top_y = random.choice([130, 150, 170])
@@ -271,50 +266,45 @@ class VideoStates(StatesGroup):
     collecting_photos = State()
 
 
-# --- ФУНКЦИЯ АВТОМАТИЧЕСКОГО СБРОСА СТАРЫХ СЕАНСОВ ---
-async def clear_old_sessions():
-    """Периодически очищает зависшие сеансы пользователей (если они забросили отправку фото)"""
-    while True:
-        await asyncio.sleep(60)  # Проверка каждую минуту
-        now = datetime.now()
-        expired_users = []
-        
-        for user_id, last_time in user_sessions.items():
-            if now - last_time > timedelta(minutes=10):  # Если прошло больше 10 минут
-                expired_users.append(user_id)
-                
-        for user_id in expired_users:
-            del user_sessions[user_id]
-            # Сбрасываем FSM состояние для неактивного пользователя
-            try:
-                state_context = FSMContext(
-                    storage=storage, 
-                    key=types.StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
-                )
-                await state_context.clear()
-            except:
-                pass
+# Клавіатура керування знизу
+def get_main_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🎬 Створити відео")
+    builder.button(text="❌ Скасувати")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
 
 
 @dp.message(F.text == "/start")
 async def cmd_start(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    user_sessions[user_id] = datetime.now()
-    
     await state.clear()
+    await message.answer(
+        "Привіт! Натисни кнопку нижче або одразу починай роботу.",
+        reply_markup=get_main_keyboard()
+    )
+
+
+@dp.message(F.text == "🎬 Створити відео")
+async def start_creation(message: types.Message, state: FSMContext):
     await state.set_state(VideoStates.collecting_photos)
     await state.update_data(photos=[])
-
     await message.answer(
-        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
+        "📸 Надішли рівно 3 фотографії для нового відео!",
+        reply_markup=get_main_keyboard()
+    )
+
+
+@dp.message(F.text == "❌ Скасувати")
+async def cancel_creation(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Роботу скасовано. Кнопки прибрано.",
+        reply_markup=types.ReplyKeyboardRemove()
     )
 
 
 @dp.message(F.photo, VideoStates.collecting_photos)
 async def handle_photos(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    user_sessions[user_id] = datetime.now()
-    
     data = await state.get_data()
     photos = data.get("photos", [])
 
@@ -323,25 +313,23 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
     photo_file_id = message.photo[-1].file_id
     photos.append(photo_file_id)
-
     photos = photos[:3]
     await state.update_data(photos=photos)
 
     current_count = len(photos)
     if current_count < 3:
-        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...")
+        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...", reply_markup=get_main_keyboard())
         return
 
-    # Удаляем из трекера активных сессий, так как видео пошло в генерацию
-    if user_id in user_sessions:
-        del user_sessions[user_id]
+    photos_to_process = list(photos)
+    # Зберігаємо стан активним, але обнуляємо список фото для наступного циклу
+    await state.update_data(photos=[])
 
-    await state.clear()
-    await generate_and_send_video(message, photos)
+    await generate_and_send_video(message, photos_to_process)
 
 
 async def generate_and_send_video(message: types.Message, photos: list):
-    processing_msg = await message.answer("⚡ Генерую відео с затемнением...")
+    processing_msg = await message.answer("⚡ Генерую відео з затемненням...", reply_markup=get_main_keyboard())
 
     user_id = message.from_user.id
     rand_id = random.randint(10000, 99999)
@@ -370,7 +358,6 @@ async def generate_and_send_video(message: types.Message, photos: list):
         for path in photos_to_use:
             img_clip = ImageClip(path).set_duration(FRAME_DURATION)
 
-            # --- МАСШТАБИРОВАНИЕ БЕЗ СПЛЮЩИВАНИЯ (object-fit: cover) ---
             orig_w, orig_h = img_clip.size
             target_ratio = VIDEO_WIDTH / VIDEO_HEIGHT
             orig_ratio = orig_w / orig_h
@@ -397,15 +384,12 @@ async def generate_and_send_video(message: types.Message, photos: list):
             bg_clip = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION)
             img_clip = img_clip.set_position(('center', 'center'))
 
-            # Затемнение 50%
             dark_overlay = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION).set_opacity(0.5)
 
             composed_clip = CompositeVideoClip([bg_clip, img_clip, dark_overlay], size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(FRAME_DURATION)
             clips.append(composed_clip)
 
         final_video = concatenate_videoclips(clips, method="compose")
-
-        # Черно-белый фильтр
         final_video = final_video.fx(vfx.blackwhite)
 
         txt_clip = ImageClip(text_img_path).set_duration(TOTAL_DURATION).set_position(('center', 'center'))
@@ -426,17 +410,14 @@ async def generate_and_send_video(message: types.Message, photos: list):
         final_video.close()
 
         await bot.edit_message_text(
-            "📤 Відео готово! Надсилаю...",
+            "📤 Відео готове! Надсилаю...",
             chat_id=message.chat.id,
             message_id=processing_msg.message_id
         )
 
-        # Отправляем видео первым сообщением
         video_to_send = types.FSInputFile(output_video_path)
-        await message.answer_video(video=video_to_send)
-
-        # Отправляем описание вторым сообщением
-        await message.answer(video_caption)
+        await message.answer_video(video=video_to_send, reply_markup=get_main_keyboard())
+        await message.answer(video_caption, reply_markup=get_main_keyboard())
 
         try:
             await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
@@ -445,8 +426,9 @@ async def generate_and_send_video(message: types.Message, photos: list):
 
     except Exception as e:
         print(f"ПОМИЛКА: {e}")
-        await message.answer(f"❌ Сталася помилка: {e}")
+        await message.answer(f"❌ Сталася помилка: {e}", reply_markup=get_main_keyboard())
     finally:
+        # Автоочистка всіх створених тимчасових файлів
         for path in saved_files:
             if os.path.exists(path):
                 os.remove(path)
@@ -455,19 +437,35 @@ async def generate_and_send_video(message: types.Message, photos: list):
         if os.path.exists(output_video_path):
             os.remove(output_video_path)
 
-        # Сбрасываем и снова включаем состояние ожидания для новых фото
-        state_context = FSMContext(storage=storage, key=types.StorageKey(bot_id=bot.id, chat_id=message.chat.id, user_id=user_id))
-        await state_context.set_state(VideoStates.collecting_photos)
-        await state_context.update_data(photos=[])
-        await message.answer("🔄 Готово! Можешь сразу надіслати наступні 3 фото для нового відео.")
+        await message.answer("🔄 Готово! Можеш одразу надіслати наступні 3 фото для нового відео.", reply_markup=get_main_keyboard())
+
+
+# --- Фоновий веб-сервер для відкриття порту на Render ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+    def log_message(self, format, *args):
+        pass
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
 
 
 async def main():
-    # Запускаем фоновую задачу очистки старых неактивных сеансов
-    asyncio.create_task(clear_old_sessions())
+    # Запускаємо HTTP-сервер в фоновому потоці для Render
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("Бот успішно запущено та відкритий веб-порт для Render!")
     
-    print("Бот успішно запущено!")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot, drop_pending_updates=True)
+    except TelegramConflictError:
+        print("Конфлікт: інший екземпляр бота запущений. Вимикаємося...")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
