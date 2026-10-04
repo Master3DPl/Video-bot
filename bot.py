@@ -244,12 +244,13 @@ async def handle_photos(message: types.Message, state: FSMContext):
         return
 
     photo_file_id = message.photo[-1].file_id
-    photos.append(photo_file_id)
-    await state.update_data(photos=photos)
+    if photo_file_id not in photos:
+        photos.append(photo_file_id)
+        await state.update_data(photos=photos)
 
-    # Чекаємо трохи, щоб з'явилися інші фото з альбому, якщо вони надіслані пачкою
+    # Даємо невелику паузу, щоб зібрати всі фото з альбому пачкою
     if len(photos) < 3:
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(1.5)
         data = await state.get_data()
         photos = data.get("photos", [])
         if len(photos) < 3:
@@ -274,7 +275,6 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
     output_video_path = f"output_{user_id}_{rand_id}.mp4"
 
     try:
-        # Надійне скачування через file_path
         for i, file_id in enumerate(photo_file_ids):
             file_info = await bot.get_file(file_id)
             local_path = f"temp_{user_id}_{rand_id}_{i}.jpg"
@@ -335,7 +335,6 @@ async def generate_and_send_video(message: types.Message, photo_file_ids: list):
             )
             final_video.close()
 
-        # Запускаємо важкий рендеринг у фоновому потоці
         await asyncio.to_thread(blocking_render)
 
         if not os.path.exists(output_video_path) or os.path.getsize(output_video_path) == 0:
