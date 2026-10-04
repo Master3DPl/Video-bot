@@ -1,7 +1,4 @@
-pyTelegramBotAPI
-Pillow
-moviepy
-yt-dlp
-flask
-rapidfuzz
-aiogram
+aiogram==3.13.1
+Pillow==10.4.0
+moviepy==1.0.3
+nest-asyncio==1.6.0
