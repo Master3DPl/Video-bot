@@ -17,10 +17,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
+# Корректные импорты для версии moviepy==1.0.3
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 import moviepy.video.fx.all as vfx
 
-# Токен бота
+# Твой токен бота
 TOKEN = "8998435250:AAEZAPRC91vOlxccasCCIRC503bgV0e5HRA"
 
 bot = Bot(token=TOKEN)
@@ -41,6 +42,7 @@ DESCRIPTIONS_FILE = "descriptions.txt"
 FONT_FILE = "DejaVuSans-Bold.ttf"
 
 def generate_large_quotes_base():
+    """Генерирует расширенную базу из 1000+ глубоких цитат"""
     base_pairs = [
         (
             "ты пытаешься контролировать каждую мелоч вокруг,\nпотому что панически боишься потерять\nпочву под ногами..",
@@ -102,6 +104,7 @@ def generate_large_quotes_base():
 
 
 def generate_large_descriptions_base():
+    """Генерирует расширенную базу из 1000+ уникальных описаний к видео"""
     templates = [
         "оно того стоило? 🖤 #рекомендации #глубоко #мысли",
         "пока ты думаешь, другие забирают твое. 🥀 #жиза #психология",
@@ -114,7 +117,7 @@ def generate_large_descriptions_base():
         "сколько еще будешь терпеть? 🎯 #выбор #цель",
         "задумайся на секунду. 🥀 #момент #переосмысление",
         "жизнь слишком коротка для фальши. 🔥 #правда #инсайт",
-        "этот выбор определит твое будущее. 👁 #путь #развитие"
+        "этот выбор определит твое будущее. 👁️ #путь #развитие"
     ]
 
     all_descs = []
@@ -263,7 +266,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_state(VideoStates.collecting_photos)
     await state.update_data(photos=[])
-    await message.answer("Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!")
+
+    await message.answer(
+        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
+    )
 
 
 @dp.message(F.photo, VideoStates.collecting_photos)
@@ -284,8 +290,10 @@ async def handle_photos(message: types.Message, state: FSMContext):
         await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...")
         return
 
-    await state.clear()
-    await generate_and_send_video(message, photos)
+    photos_to_process = list(photos)
+    await state.update_data(photos=[])
+
+    await generate_and_send_video(message, photos_to_process)
 
 
 async def generate_and_send_video(message: types.Message, photos: list):
@@ -345,6 +353,7 @@ async def generate_and_send_video(message: types.Message, photos: list):
             img_clip = img_clip.set_position(('center', 'center'))
 
             dark_overlay = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION).set_opacity(0.5)
+
             composed_clip = CompositeVideoClip([bg_clip, img_clip, dark_overlay], size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(FRAME_DURATION)
             clips.append(composed_clip)
 
@@ -395,9 +404,6 @@ async def generate_and_send_video(message: types.Message, photos: list):
         if os.path.exists(output_video_path):
             os.remove(output_video_path)
 
-        state_context = FSMContext(storage=storage, key=types.StorageKey(bot_id=bot.id, chat_id=message.chat.id, user_id=user_id))
-        await state_context.set_state(VideoStates.collecting_photos)
-        await state_context.update_data(photos=[])
         await message.answer("🔄 Готово! Можешь сразу надіслати наступні 3 фото для нового відео.")
 
 
@@ -406,5 +412,4 @@ async def main():
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+await main()
