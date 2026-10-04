@@ -418,6 +418,6 @@ async def main():
     await dp.start_polling(bot)
 
 
-# Безопасный запуск для Render и серверов
+# Безопасный запуск для Render
 if __name__ == "__main__":
     asyncio.run(main())
