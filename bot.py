@@ -3,6 +3,9 @@ import random
 import asyncio
 import textwrap
 import urllib.request
+import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image, ImageDraw, ImageFont
 
 # Виправлення помилки сумісності ANTIALIAS для нових версій Pillow
@@ -16,6 +19,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramConflictError
 
 # Коректні імпорти для версії moviepy==1.0.3
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
@@ -407,9 +411,32 @@ async def generate_and_send_video(message: types.Message, photos: list):
         await message.answer("🔄 Готово! Можеш одразу надіслати наступні 3 фото для нового відео.")
 
 
+# --- Фоновий веб-сервер для відкриття порту на Render ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+    def log_message(self, format, *args):
+        pass
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+
 async def main():
-    print("Бот успішно запущено!")
-    await dp.start_polling(bot)
+    # Запускаємо HTTP-сервер в фоновому потоці для Render
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("Бот успішно запущено та відкритий веб-порт для Render!")
+    
+    try:
+        await dp.start_polling(bot, drop_pending_updates=True)
+    except TelegramConflictError:
+        print("Конфлікт: інший екземпляр бота запущений. Вимикаємося...")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
