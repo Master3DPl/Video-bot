@@ -17,11 +17,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# Корректные импорты для версии moviepy==1.0.3
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
 import moviepy.video.fx.all as vfx
 
-# Твой токен бота
+# Токен бота
 TOKEN = "8998435250:AAEZAPRC91vOlxccasCCIRC503bgV0e5HRA"
 
 bot = Bot(token=TOKEN)
@@ -42,7 +41,6 @@ DESCRIPTIONS_FILE = "descriptions.txt"
 FONT_FILE = "DejaVuSans-Bold.ttf"
 
 def generate_large_quotes_base():
-    """Генерирует расширенную базу из 1000+ глубоких цитат"""
     base_pairs = [
         (
             "ты пытаешься контролировать каждую мелоч вокруг,\nпотому что панически боишься потерять\nпочву под ногами..",
@@ -78,7 +76,7 @@ def generate_large_quotes_base():
         ),
         (
             "ты окружаешь себя иллюзиями безопасности,\nпотому что боишься столкнуться\nс суровой реальностью..",
-            "сделаешь шаг вперед или сдаешься\nпри первой же трудности.."
+            "сделаешь шаг вперед или сдашься\nпри первой же трудности.."
         ),
         (
             "ты ждешь, что кто-то придет и изменит твою жизнь,\nхотя ключ от всех дверей\nвсегда был у тебя..",
@@ -104,7 +102,6 @@ def generate_large_quotes_base():
 
 
 def generate_large_descriptions_base():
-    """Генерирует расширенную базу из 1000+ уникальных описаний к видео"""
     templates = [
         "оно того стоило? 🖤 #рекомендации #глубоко #мысли",
         "пока ты думаешь, другие забирают твое. 🥀 #жиза #психология",
@@ -117,7 +114,7 @@ def generate_large_descriptions_base():
         "сколько еще будешь терпеть? 🎯 #выбор #цель",
         "задумайся на секунду. 🥀 #момент #переосмысление",
         "жизнь слишком коротка для фальши. 🔥 #правда #инсайт",
-        "этот выбор определит твое будущее. 👁️ #путь #развитие"
+        "этот выбор определит твое будущее. 👁 #путь #развитие"
     ]
 
     all_descs = []
@@ -130,7 +127,6 @@ def generate_large_descriptions_base():
 
 
 def get_unique_quote():
-    """Берёт цитату из файла и удаляет её, чтобы она не повторялась"""
     if not os.path.exists(QUOTES_FILE):
         quotes = generate_large_quotes_base()
         with open(QUOTES_FILE, "w", encoding="utf-8") as f:
@@ -156,7 +152,6 @@ def get_unique_quote():
 
 
 def get_unique_description():
-    """Берёт уникальное описание из файла и удаляет его"""
     if not os.path.exists(DESCRIPTIONS_FILE):
         descs = generate_large_descriptions_base()
         with open(DESCRIPTIONS_FILE, "w", encoding="utf-8") as f:
@@ -182,7 +177,6 @@ def get_unique_description():
 
 
 def get_font(size=44):
-    """Гарантированно загружает шрифт нужного размера (скачивает, если файла нет)"""
     if not os.path.exists(FONT_FILE):
         try:
             url = "https://github.com/dejavu-fonts/dejavu-fonts-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
@@ -213,7 +207,6 @@ def get_font(size=44):
 
 
 def create_text_image(text, width, height):
-    """Рисует крупный, читаемый текст с вариативным стилем"""
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -270,10 +263,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_state(VideoStates.collecting_photos)
     await state.update_data(photos=[])
-
-    await message.answer(
-        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
-    )
+    await message.answer("Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!")
 
 
 @dp.message(F.photo, VideoStates.collecting_photos)
@@ -286,7 +276,6 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
     photo_file_id = message.photo[-1].file_id
     photos.append(photo_file_id)
-
     photos = photos[:3]
     await state.update_data(photos=photos)
 
@@ -356,7 +345,6 @@ async def generate_and_send_video(message: types.Message, photos: list):
             img_clip = img_clip.set_position(('center', 'center'))
 
             dark_overlay = ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0)).set_duration(FRAME_DURATION).set_opacity(0.5)
-
             composed_clip = CompositeVideoClip([bg_clip, img_clip, dark_overlay], size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(FRAME_DURATION)
             clips.append(composed_clip)
 
@@ -418,6 +406,5 @@ async def main():
     await dp.start_polling(bot)
 
 
-# Безопасный запуск для Render
 if __name__ == "__main__":
     asyncio.run(main())
