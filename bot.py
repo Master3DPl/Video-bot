@@ -240,26 +240,16 @@ async def handle_photos(message: types.Message, state: FSMContext):
     data = await state.get_data()
     photos = data.get("photos", [])
 
-    if len(photos) >= 3:
-        return
-
     photo_file_id = message.photo[-1].file_id
     if photo_file_id not in photos:
         photos.append(photo_file_id)
         await state.update_data(photos=photos)
 
-    # Даємо невелику паузу, щоб зібрати всі фото з альбому пачкою
-    if len(photos) < 3:
-        await asyncio.sleep(1.5)
-        data = await state.get_data()
-        photos = data.get("photos", [])
-        if len(photos) < 3:
-            return
-
-    photos_to_process = list(photos[:3])
-    await state.update_data(photos=[])
-
-    await generate_and_send_video(message, photos_to_process)
+    # Як тільки набралося рівно 3 фото — відразу запускаємо генерацію без зайвих очікувань
+    if len(photos) >= 3:
+        photos_to_process = list(photos[:3])
+        await state.update_data(photos=[])
+        await generate_and_send_video(message, photos_to_process)
 
 
 async def generate_and_send_video(message: types.Message, photo_file_ids: list):
