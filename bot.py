@@ -20,6 +20,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramConflictError
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # Коректні імпорти для версії moviepy==1.0.3
 from moviepy.editor import ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
@@ -265,14 +266,40 @@ class VideoStates(StatesGroup):
     collecting_photos = State()
 
 
+# Клавіатура керування знизу
+def get_main_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🎬 Створити відео")
+    builder.button(text="❌ Скасувати")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
+
+
 @dp.message(F.text == "/start")
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
+    await message.answer(
+        "Привіт! Натисни кнопку нижче або одразу починай роботу.",
+        reply_markup=get_main_keyboard()
+    )
+
+
+@dp.message(F.text == "🎬 Створити відео")
+async def start_creation(message: types.Message, state: FSMContext):
     await state.set_state(VideoStates.collecting_photos)
     await state.update_data(photos=[])
-
     await message.answer(
-        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
+        "📸 Надішли рівно 3 фотографії для нового відео!",
+        reply_markup=get_main_keyboard()
+    )
+
+
+@dp.message(F.text == "❌ Скасувати")
+async def cancel_creation(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Роботу скасовано. Кнопки прибрано.",
+        reply_markup=types.ReplyKeyboardRemove()
     )
 
 
@@ -291,17 +318,18 @@ async def handle_photos(message: types.Message, state: FSMContext):
 
     current_count = len(photos)
     if current_count < 3:
-        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...")
+        await message.answer(f"📸 Отримано фото {current_count}/3. Надішли ще {3 - current_count}...", reply_markup=get_main_keyboard())
         return
 
     photos_to_process = list(photos)
+    # Зберігаємо стан активним, але обнуляємо список фото для наступного циклу
     await state.update_data(photos=[])
 
     await generate_and_send_video(message, photos_to_process)
 
 
 async def generate_and_send_video(message: types.Message, photos: list):
-    processing_msg = await message.answer("⚡ Генерую відео з затемненням...")
+    processing_msg = await message.answer("⚡ Генерую відео з затемненням...", reply_markup=get_main_keyboard())
 
     user_id = message.from_user.id
     rand_id = random.randint(10000, 99999)
@@ -388,8 +416,8 @@ async def generate_and_send_video(message: types.Message, photos: list):
         )
 
         video_to_send = types.FSInputFile(output_video_path)
-        await message.answer_video(video=video_to_send)
-        await message.answer(video_caption)
+        await message.answer_video(video=video_to_send, reply_markup=get_main_keyboard())
+        await message.answer(video_caption, reply_markup=get_main_keyboard())
 
         try:
             await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
@@ -398,8 +426,9 @@ async def generate_and_send_video(message: types.Message, photos: list):
 
     except Exception as e:
         print(f"ПОМИЛКА: {e}")
-        await message.answer(f"❌ Сталася помилка: {e}")
+        await message.answer(f"❌ Сталася помилка: {e}", reply_markup=get_main_keyboard())
     finally:
+        # Автоочистка всіх створених тимчасових файлів
         for path in saved_files:
             if os.path.exists(path):
                 os.remove(path)
@@ -408,7 +437,7 @@ async def generate_and_send_video(message: types.Message, photos: list):
         if os.path.exists(output_video_path):
             os.remove(output_video_path)
 
-        await message.answer("🔄 Готово! Можеш одразу надіслати наступні 3 фото для нового відео.")
+        await message.answer("🔄 Готово! Можеш одразу надіслати наступні 3 фото для нового відео.", reply_markup=get_main_keyboard())
 
 
 # --- Фоновий веб-сервер для відкриття порту на Render ---
