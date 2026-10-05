@@ -5,6 +5,10 @@ import textwrap
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 
+# Запускаем фоновый веб-сервер для Render, чтобы он видел открытый порт
+from healthcheck import start_healthcheck_server
+start_healthcheck_server()
+
 # Исправление ошибки совместимости ANTIALIAS для новых версий Pillow
 try:
     if not hasattr(Image, 'ANTIALIAS'):
@@ -241,7 +245,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.update_data(photos=[])
 
     await message.answer(
-        "Привіт! Надішли 3 фотографией, і я одразу зроблю з них відео!"
+        "Привіт! Надішли 3 фотографії, і я одразу зроблю з них відео!"
     )
 
 
@@ -349,7 +353,6 @@ async def generate_and_send_video(message: types.Message, photos: list):
             logger=None
         )
         
-        # Закрываем клипы во избежание утечек памяти
         final_video.close()
         for c in clips:
             c.close()
@@ -373,7 +376,6 @@ async def generate_and_send_video(message: types.Message, photos: list):
         print(f"ПОМИЛКА: {e}")
         await message.answer(f"❌ Сталася помилка: {e}")
     finally:
-        # Безопасное закрытие видеоклипа если произошла ошибка
         try:
             if final_video:
                 final_video.close()
